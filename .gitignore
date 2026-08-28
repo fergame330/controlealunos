@@ -22,3 +22,7 @@ yarn-error.log*
 *.pem
 .vercel
 *.tsbuildinfo
+
+# bancos temporarios (CI e comandos manuais do prisma)
+/ci.db
+/shadow.db
