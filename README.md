@@ -110,10 +110,19 @@ ADMIN_EMAIL=voce@instituicao.br ADMIN_SENHA='nova-senha' npm run db:seed
 Sem `ADMIN_SENHA`, o seed não toca na senha de quem já está cadastrado — assim
 rodá-lo de novo não desfaz uma troca feita pela interface.
 
-> **Nunca crie usuários direto no banco.** As senhas são guardadas como hash
-> bcrypt, e o login compara com `bcrypt.compare`. Um `INSERT` manual com a
-> senha em texto puro grava um valor que nunca vai conferir, e o login
-> responde "E-mail ou senha inválidos". Use o seed ou a tela de preceptores.
+### Acessos criados fora do sistema
+
+As senhas são guardadas como hash bcrypt. Um acesso criado à mão no banco
+(`INSERT` manual, importação de planilha) costuma gravar a senha em texto puro,
+que jamais conferiria com `bcrypt.compare`.
+
+Para não trancar ninguém para fora, o login aceita esse formato herdado: se o
+valor gravado não tem cara de hash bcrypt, ele é comparado como texto e, quando
+confere, **é regravado como hash na hora**. O texto puro dura até o primeiro
+login bem-sucedido daquele usuário.
+
+Ainda assim, prefira o seed ou a tela de preceptores: enquanto a senha estiver
+em texto puro, quem lê o banco lê a senha.
 
 ### Publicando com Postgres gerenciado
 

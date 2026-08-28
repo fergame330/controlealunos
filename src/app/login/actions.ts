@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 
-import { conferirSenha, criarSessao } from "@/lib/auth";
+import { conferirSenhaArmazenada, criarSessao, gerarHashSenha } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export type EstadoLogin = { erro?: string };
@@ -31,10 +31,22 @@ export async function entrar(
   }
 
   const usuario = await prisma.usuario.findUnique({ where: { email } });
-  const senhaConfere = await conferirSenha(senha, usuario?.senha ?? HASH_FALSO);
+  const { confere, precisaMigrar } = await conferirSenhaArmazenada(
+    senha,
+    usuario?.senha ?? HASH_FALSO,
+  );
 
-  if (!usuario || !senhaConfere) {
+  if (!usuario || !confere) {
     return { erro: "E-mail ou senha inválidos." };
+  }
+
+  // Acesso criado fora do app, com a senha em texto puro: agora que ela foi
+  // conferida, regrava como hash para que o texto puro não continue no banco.
+  if (precisaMigrar) {
+    await prisma.usuario.update({
+      where: { id: usuario.id },
+      data: { senha: await gerarHashSenha(senha) },
+    });
   }
 
   await criarSessao({
