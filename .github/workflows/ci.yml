@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancela execucoes antigas do mesmo branch quando chega um push novo.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Tipos, migrations e build
+    runs-on: ubuntu-latest
+
+    env:
+      # Banco descartavel: o CI so precisa provar que as migrations aplicam
+      # e que o projeto compila. Nenhum dado real passa por aqui.
+      DATABASE_URL: file:./ci.db
+      # Valor de teste. O segredo de verdade fica no ambiente de producao.
+      AUTH_SECRET: segredo-apenas-para-ci-nao-usar-em-producao
+
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar o Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Aplicar as migrations em um banco limpo
+        run: npx prisma migrate deploy
+
+      - name: Conferir se as migrations batem com o schema.prisma
+        run: |
+          npx prisma migrate diff \
+            --from-migrations ./prisma/migrations \
+            --to-schema-datamodel ./prisma/schema.prisma \
+            --shadow-database-url "file:${RUNNER_TEMP}/shadow.db" \
+            --exit-code
+
+      - name: Checar os tipos
+        run: npm run typecheck
+
+      - name: Compilar a aplicacao
+        run: npm run build
