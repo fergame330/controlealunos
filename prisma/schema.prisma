@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url = env("DATABASE_URL")
+}
+
+model Usuario {
+  id String @id @default(cuid())
+  nome String
+  administrador Boolean @default(false)
+  email String @unique
+  senha String
+  criadoEm DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  frequencias Frequencia[]
+  pontuacoes Pontuacao[]
+}
+
+model Matricula {
+  id String @id @default(cuid())
+  nome String
+  matricula String @unique
+  cpf String @unique
+  criadoEm DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  frequencias Frequencia[]
+  nota Nota?
+  @@index([nome])
+}
+
+model Frequencia {
+  id String @id @default(cuid())
+  alunoId String
+  aluno Matricula @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  preceptorId String
+  preceptor Usuario @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
+  dataEnvio DateTime @default(now())
+  ip String
+  browser String
+  os String
+  dispositivo String
+  dataReferente DateTime
+  horarioInicio String
+  horarioFim String
+  cargaHoraria Int
+  @@index([alunoId, dataReferente])
+  @@index([preceptorId])
+}
+
+model Nota {
+  id String @id @default(cuid())
+  alunoId String @unique
+  aluno Matricula @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  criadoEm DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  pontuacoes Pontuacao[]
+}
+
+model Pontuacao {
+  id String @id @default(cuid())
+  notaId String
+  nota Nota @relation(fields: [notaId], references: [id], onDelete: Cascade)
+  preceptorId String
+  preceptor Usuario @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
+  dataEnvio DateTime @default(now())
+  ip String
+  browser String
+  os String
+  dispositivo String
+  nome String
+  valor Decimal
+  peso Int @default(1)
+  @@index([notaId])
+  @@index([preceptorId])
+}
