@@ -4,7 +4,7 @@ Sistema de registro de **frequência** e **notas** de alunos por preceptores, co
 login por e-mail e senha e um perfil administrador que cadastra os acessos de
 preceptores e os alunos.
 
-Feito com **Next.js (App Router)**, **Prisma** (SQLite), **Tailwind CSS** e
+Feito com **Next.js (App Router)**, **Prisma** (PostgreSQL), **Tailwind CSS** e
 TypeScript. A autenticação é própria (senha com bcrypt + sessão JWT em cookie
 `httpOnly`), sem dependência externa.
 
@@ -49,12 +49,18 @@ operacional e tipo de dispositivo. Essas informações aparecem na coluna
 
 ## Como rodar
 
-Requer Node.js 20+.
+Requer Node.js 20+ e PostgreSQL 14+. Para subir um Postgres local com Docker:
+
+```bash
+docker run -d --name controlealunos-db \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=controlealunos \
+  -p 5432:5432 postgres:16
+```
 
 ```bash
 npm install                 # instala e gera o Prisma Client
 cp .env.example .env        # ajuste as variáveis (veja abaixo)
-npm run db:migrate          # cria o banco SQLite
+npm run db:migrate          # cria as tabelas
 npm run db:seed             # cria o administrador inicial
 npm run dev                 # http://localhost:3000
 ```
@@ -63,7 +69,7 @@ npm run dev                 # http://localhost:3000
 
 | Variável       | Descrição                                                        |
 | -------------- | ---------------------------------------------------------------- |
-| `DATABASE_URL` | Caminho do banco. Padrão: `file:./dev.db`                         |
+| `DATABASE_URL` | Conexão do PostgreSQL: `postgresql://usuario:senha@host:5432/controlealunos?schema=public` |
 | `AUTH_SECRET`  | Segredo que assina o cookie de sessão (mínimo de 16 caracteres)   |
 
 Gere um segredo forte para produção:
@@ -92,6 +98,28 @@ Para popular também um preceptor e alguns alunos de exemplo:
 SEED_EXEMPLOS=1 npm run db:seed
 ```
 
+### Publicando com Postgres gerenciado
+
+Em Neon, Supabase, Railway ou Render, basta apontar a `DATABASE_URL` para a
+string de conexão do provedor e rodar `npm run db:migrate` uma vez.
+
+**Se o host for serverless** (Vercel, Netlify), cada requisição pode abrir uma
+conexão nova e estourar o limite do banco. Nesse caso use a string **pooled**
+do provedor na `DATABASE_URL` e informe a conexão direta para as migrations,
+que não funcionam através do pooler:
+
+```prisma
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // pooled (pgbouncer)
+  directUrl = env("DIRECT_URL")     // conexão direta, usada nas migrations
+}
+```
+
+Deixei isso fora do schema de propósito: `directUrl` passa a ser obrigatório
+assim que declarado, e em Postgres comum ele só atrapalha. Acrescente quando
+for para um host serverless.
+
 ## Scripts
 
 | Script               | O que faz                                        |
@@ -100,7 +128,7 @@ SEED_EXEMPLOS=1 npm run db:seed
 | `npm run build`      | Gera o Prisma Client e compila para produção     |
 | `npm start`          | Sobe a build de produção                         |
 | `npm run typecheck`  | Checagem de tipos do TypeScript                  |
-| `npm run db:migrate` | Aplica as migrations                             |
+| `npm run db:migrate` | Aplica as migrations no banco                    |
 | `npm run db:push`    | Sincroniza o schema sem migration (só em dev)    |
 | `npm run db:seed`    | Cria/atualiza o administrador inicial            |
 | `npm run db:studio`  | Abre o Prisma Studio                             |
@@ -110,7 +138,7 @@ SEED_EXEMPLOS=1 npm run db:seed
 ```
 prisma/
   schema.prisma            modelos Usuario, Matricula, Frequencia, Nota, Pontuacao
-  migrations/              migration inicial versionada
+  migrations/              migration inicial versionada (PostgreSQL)
   seed.ts                  administrador inicial (e dados de exemplo opcionais)
 src/
   middleware.ts            primeira barreira de acesso (valida o cookie)
@@ -151,3 +179,13 @@ src/
   `timeZone: "UTC"`, para que o fuso do servidor não mude o dia registrado.
 - **CPF** é armazenado apenas com dígitos e exibido formatado; a busca aceita as
   duas formas.
+- **Filtro de alunos usa `mode: "insensitive"`.** No PostgreSQL o `contains` do
+  Prisma diferencia maiúsculas de minúsculas (vira `LIKE`), ao contrário do
+  SQLite. Sem esse modo, buscar `ana` não encontraria `Ana Beatriz`.
+- **`valor` é `DECIMAL(5,2)`.** O padrão do Prisma no Postgres seria
+  `DECIMAL(65,30)`; cinco dígitos com duas casas cobrem a escala de notas com
+  folga.
+- **`ip` é `VARCHAR(45)`, não `INET`.** O tipo `inet` do Postgres recusa
+  qualquer coisa que não seja um endereço válido, e a auditoria grava
+  `desconhecido` quando a requisição não traz cabeçalho de IP — o caso normal
+  em desenvolvimento. 45 caracteres comportam IPv6.

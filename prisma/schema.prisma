@@ -4,10 +4,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Define custom output path for generated Prisma Client
 generator client {
   provider = "prisma-client-js"
-  output   = "/app/generated/prisma-client"
 }
 
 model Usuario {
@@ -44,7 +42,7 @@ model Frequencia {
   preceptorId   String
   preceptor     Usuario   @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
   dataEnvio     DateTime  @default(now()) @db.Timestamptz(3)
-  ip            String    @db.Inet
+  ip            String    @db.VarChar(45)
   browser       String    @db.VarChar(120)
   os            String    @db.VarChar(120)
   dispositivo   String    @db.VarChar(120)
@@ -74,7 +72,7 @@ model Pontuacao {
   preceptorId String
   preceptor   Usuario  @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
   dataEnvio   DateTime @default(now()) @db.Timestamptz(3)
-  ip          String   @db.Inet
+  ip          String   @db.VarChar(45)
   browser     String   @db.VarChar(120)
   os          String   @db.VarChar(120)
   dispositivo String   @db.VarChar(120)

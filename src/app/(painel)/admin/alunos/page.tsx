@@ -23,8 +23,10 @@ export default async function PaginaAlunos({
     where: termo
       ? {
           OR: [
-            { nome: { contains: termo } },
-            { matricula: { contains: termo } },
+            // mode insensitive: no Postgres o contains é sensível a maiúsculas,
+            // ao contrário do SQLite. Sem isso, "ana" não acharia "Ana".
+            { nome: { contains: termo, mode: "insensitive" as const } },
+            { matricula: { contains: termo, mode: "insensitive" as const } },
             ...(digitos ? [{ cpf: { contains: digitos } }] : []),
           ],
         }

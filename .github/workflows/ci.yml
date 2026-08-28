@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancela execucoes antigas do mesmo branch quando chega um push novo.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Tipos, migrations e build
+    runs-on: ubuntu-latest
+
+    # Postgres descartavel, igual ao de producao em versao. O CI so precisa
+    # provar que as migrations aplicam e que o projeto compila; nenhum dado
+    # real passa por aqui.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: controlealunos_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/controlealunos_ci?schema=public
+      # Valor de teste. O segredo de verdade fica no ambiente de producao.
+      AUTH_SECRET: segredo-apenas-para-ci-nao-usar-em-producao
+
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar o Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Aplicar as migrations em um banco limpo
+        run: npx prisma migrate deploy
+
+      # Compara o banco recem-migrado com o schema. Se alguem alterar o
+      # schema.prisma sem gerar a migration, isso falha aqui.
+      - name: Conferir se as migrations batem com o schema.prisma
+        run: |
+          npx prisma migrate diff \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel ./prisma/schema.prisma \
+            --exit-code
+
+      - name: Checar os tipos
+        run: npm run typecheck
+
+      - name: Compilar a aplicacao
+        run: npm run build
