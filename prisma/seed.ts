@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 const EMAIL_ADMIN = (process.env.ADMIN_EMAIL ?? "admin@escola.local").toLowerCase();
-const SENHA_ADMIN = process.env.ADMIN_SENHA ?? "admin12345";
+const SENHA_INFORMADA = process.env.ADMIN_SENHA;
+const SENHA_ADMIN = SENHA_INFORMADA ?? "admin12345";
 const NOME_ADMIN = process.env.ADMIN_NOME ?? "Administrador";
 
 const ALUNOS_EXEMPLO = [
@@ -16,7 +17,13 @@ const ALUNOS_EXEMPLO = [
 async function main() {
   const admin = await prisma.usuario.upsert({
     where: { email: EMAIL_ADMIN },
-    update: { administrador: true },
+    update: {
+      administrador: true,
+      // Só redefine a senha quando ADMIN_SENHA foi informada. Assim um seed
+      // rodado sem variáveis não sobrescreve uma senha já trocada na interface,
+      // mas informar ADMIN_SENHA vira o caminho de recuperação de acesso.
+      ...(SENHA_INFORMADA ? { senha: await bcrypt.hash(SENHA_INFORMADA, 12) } : {}),
+    },
     create: {
       nome: NOME_ADMIN,
       email: EMAIL_ADMIN,
@@ -26,6 +33,10 @@ async function main() {
   });
 
   console.log(`Administrador pronto: ${admin.email}`);
+
+  if (SENHA_INFORMADA) {
+    console.log("Senha redefinida a partir de ADMIN_SENHA.");
+  }
 
   if (process.env.SEED_EXEMPLOS === "1") {
     const preceptor = await prisma.usuario.upsert({

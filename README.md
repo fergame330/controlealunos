@@ -98,6 +98,23 @@ Para popular também um preceptor e alguns alunos de exemplo:
 SEED_EXEMPLOS=1 npm run db:seed
 ```
 
+### Recuperar o acesso
+
+Rodar o seed com `ADMIN_SENHA` redefine a senha de um administrador que já
+exista com aquele e-mail:
+
+```bash
+ADMIN_EMAIL=voce@instituicao.br ADMIN_SENHA='nova-senha' npm run db:seed
+```
+
+Sem `ADMIN_SENHA`, o seed não toca na senha de quem já está cadastrado — assim
+rodá-lo de novo não desfaz uma troca feita pela interface.
+
+> **Nunca crie usuários direto no banco.** As senhas são guardadas como hash
+> bcrypt, e o login compara com `bcrypt.compare`. Um `INSERT` manual com a
+> senha em texto puro grava um valor que nunca vai conferir, e o login
+> responde "E-mail ou senha inválidos". Use o seed ou a tela de preceptores.
+
 ### Publicando com Postgres gerenciado
 
 Em Neon, Supabase, Railway ou Render, basta apontar a `DATABASE_URL` para a
