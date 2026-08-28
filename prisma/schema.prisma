@@ -10,71 +10,78 @@ generator client {
 }
 
 model Usuario {
-  id String @id @default(cuid())
-  nome String
-  administrador Boolean @default(false)
-  email String @unique
-  senha String
-  criadoEm DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  id            String   @id @default(cuid())
+  nome          String   @db.VarChar(120)
+  administrador Boolean  @default(false)
+  email         String   @unique @db.VarChar(180)
+  senha         String   @db.VarChar(255)
+  criadoEm      DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm  DateTime @updatedAt @db.Timestamptz(3)
+
   frequencias Frequencia[]
-  pontuacoes Pontuacao[]
+  pontuacoes  Pontuacao[]
 }
 
 model Matricula {
-  id String @id @default(cuid())
-  nome String
-  matricula String @unique
-  cpf String @unique
-  criadoEm DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  id           String   @id @default(cuid())
+  nome         String   @db.VarChar(120)
+  matricula    String   @unique @db.VarChar(30)
+  cpf          String   @unique @db.Char(11)
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
+
   frequencias Frequencia[]
-  nota Nota?
+  nota        Nota?
+
   @@index([nome])
 }
 
 model Frequencia {
-  id String @id @default(cuid())
-  alunoId String
-  aluno Matricula @relation(fields: [alunoId], references: [id], onDelete: Cascade)
-  preceptorId String
-  preceptor Usuario @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
-  dataEnvio DateTime @default(now())
-  ip String
-  browser String
-  os String
-  dispositivo String
-  dataReferente DateTime
-  horarioInicio String
-  horarioFim String
-  cargaHoraria Int
+  id            String    @id @default(cuid())
+  alunoId       String
+  aluno         Matricula @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  preceptorId   String
+  preceptor     Usuario   @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
+  dataEnvio     DateTime  @default(now()) @db.Timestamptz(3)
+  ip            String    @db.Inet
+  browser       String    @db.VarChar(120)
+  os            String    @db.VarChar(120)
+  dispositivo   String    @db.VarChar(120)
+  dataReferente DateTime  @db.Date
+  horarioInicio String    @db.VarChar(5)
+  horarioFim    String    @db.VarChar(5)
+  cargaHoraria  Int       @db.SmallInt
+
   @@index([alunoId, dataReferente])
   @@index([preceptorId])
 }
 
 model Nota {
-  id String @id @default(cuid())
-  alunoId String @unique
-  aluno Matricula @relation(fields: [alunoId], references: [id], onDelete: Cascade)
-  criadoEm DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  id           String    @id @default(cuid())
+  alunoId      String    @unique
+  aluno        Matricula @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime  @updatedAt @db.Timestamptz(3)
+
   pontuacoes Pontuacao[]
 }
 
 model Pontuacao {
-  id String @id @default(cuid())
-  notaId String
-  nota Nota @relation(fields: [notaId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  notaId      String
+  nota        Nota     @relation(fields: [notaId], references: [id], onDelete: Cascade)
   preceptorId String
-  preceptor Usuario @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
-  dataEnvio DateTime @default(now())
-  ip String
-  browser String
-  os String
-  dispositivo String
-  nome String
-  valor Decimal
-  peso Int @default(1)
+  preceptor   Usuario  @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
+  dataEnvio   DateTime @default(now()) @db.Timestamptz(3)
+  ip          String   @db.Inet
+  browser     String   @db.VarChar(120)
+  os          String   @db.VarChar(120)
+  dispositivo String   @db.VarChar(120)
+  nome        String   @db.VarChar(120)
+  valor       Decimal  @db.Decimal(5, 2)
+  peso        Int      @default(1) @db.SmallInt
+
   @@index([notaId])
   @@index([preceptorId])
 }
+
