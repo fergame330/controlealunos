@@ -8,33 +8,6 @@ const SENHA_INFORMADA = process.env.ADMIN_SENHA;
 const SENHA_ADMIN = SENHA_INFORMADA ?? "admin12345";
 const NOME_ADMIN = process.env.ADMIN_NOME ?? "Administrador";
 
-/**
- * Lista fixa avaliada em toda avaliação. Os quatro grupos são apenas títulos
- * de seção no formulário: quem recebe nota são as 14 competências.
- */
-const COMPETENCIAS: Array<{ grupo: string; nome: string }> = [
-  { grupo: "Frequência", nome: "Assiduidade" },
-  { grupo: "Frequência", nome: "Pontualidade" },
-  { grupo: "Aprendizado", nome: "Conhecimento teórico" },
-  { grupo: "Aprendizado", nome: "Conhecimento prático" },
-  { grupo: "Aprendizado", nome: "Busca ativa por conhecimento" },
-  { grupo: "Aprendizado", nome: "Evolução do conhecimento durante o estágio" },
-  { grupo: "Comunicação", nome: "Relação com pacientes e acompanhantes" },
-  {
-    grupo: "Comunicação",
-    nome: "Relação com outros estudantes e profissionais da mesma ou de outras áreas",
-  },
-  { grupo: "Conduta", nome: "Interesse" },
-  { grupo: "Conduta", nome: "Capacidade de tomar iniciativa" },
-  { grupo: "Conduta", nome: "Postura ética/humanista com o paciente" },
-  { grupo: "Conduta", nome: "Dedicação ao paciente (tentar garantir assistência)" },
-  { grupo: "Conduta", nome: "Responsabilidade com suas tarefas" },
-  {
-    grupo: "Conduta",
-    nome: "Postura crítica diante da dinâmica de trabalho e assistência do serviço",
-  },
-];
-
 const AREAS_EXEMPLO = ["Clínica Médica", "Pediatria", "Cirurgia Geral"];
 
 const ALUNOS_EXEMPLO = [
@@ -66,18 +39,6 @@ async function main() {
   if (SENHA_INFORMADA) {
     console.log("Senha redefinida a partir de ADMIN_SENHA.");
   }
-
-  // A lista de competências é parte do sistema, não dado de exemplo: sem ela
-  // não há o que avaliar. A ordem do array define a ordem no formulário.
-  for (const [indice, competencia] of COMPETENCIAS.entries()) {
-    await prisma.competencia.upsert({
-      where: { nome: competencia.nome },
-      update: { grupo: competencia.grupo, ordem: indice },
-      create: { ...competencia, ordem: indice },
-    });
-  }
-
-  console.log(`Competências sincronizadas: ${COMPETENCIAS.length}.`);
 
   if (process.env.SEED_EXEMPLOS === "1") {
     const preceptor = await prisma.usuario.upsert({

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { exigirAdministrador } from "@/lib/auth";
+import { COMPETENCIAS, GRUPOS_COMPETENCIAS } from "@/lib/competencias";
 import { prisma } from "@/lib/prisma";
 import { formatarDataHora } from "@/lib/utils";
 import { AcoesArea } from "./acoes-area";
@@ -17,20 +18,10 @@ export default async function PaginaAreas({
 
   const { erro, sucesso } = await searchParams;
 
-  const [areas, competencias] = await Promise.all([
-    prisma.area.findMany({
-      orderBy: { nome: "asc" },
-      include: { _count: { select: { avaliacoes: true } } },
-    }),
-    prisma.competencia.findMany({ orderBy: { ordem: "asc" } }),
-  ]);
-
-  const grupos = competencias.reduce<Map<string, string[]>>((mapa, competencia) => {
-    const atual = mapa.get(competencia.grupo) ?? [];
-    atual.push(competencia.nome);
-    mapa.set(competencia.grupo, atual);
-    return mapa;
-  }, new Map());
+  const areas = await prisma.area.findMany({
+    orderBy: { nome: "asc" },
+    include: { _count: { select: { avaliacoes: true } } },
+  });
 
   return (
     <div className="space-y-6">
@@ -110,22 +101,26 @@ export default async function PaginaAreas({
         <div className="cartao-corpo">
           <h2 className="titulo-secao">
             Competências avaliadas{" "}
-            <span className="text-sm font-normal text-slate-500">({competencias.length})</span>
+            <span className="text-sm font-normal text-slate-500">({COMPETENCIAS.length})</span>
           </h2>
           <p className="texto-apoio mt-1">
-            Lista fixa, igual em todas as áreas. Todas valem o mesmo na média.
+            Lista fixa, igual em todas as áreas. Todas valem o mesmo na média. Definida em{" "}
+            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
+              src/lib/competencias.ts
+            </code>
+            .
           </p>
 
           <div className="mt-4 grid gap-5 sm:grid-cols-2">
-            {[...grupos.entries()].map(([grupo, nomes]) => (
+            {GRUPOS_COMPETENCIAS.map(({ grupo, competencias }) => (
               <div key={grupo}>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   {grupo}
                 </p>
                 <ul className="mt-2 space-y-1">
-                  {nomes.map((nome) => (
-                    <li key={nome} className="text-sm text-slate-700">
-                      {nome}
+                  {competencias.map((competencia) => (
+                    <li key={competencia.id} className="text-sm text-slate-700">
+                      {competencia.nome}
                     </li>
                   ))}
                 </ul>

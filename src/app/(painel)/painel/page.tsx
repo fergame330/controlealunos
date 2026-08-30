@@ -3,12 +3,7 @@ import type { Metadata } from "next";
 
 import { exigirUsuario } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  formatarDataHora,
-  formatarMinutos,
-  formatarNota,
-  mediaAritmetica,
-} from "@/lib/utils";
+import { formatarDataHora, formatarMinutos, formatarNota } from "@/lib/utils";
 import { FormularioBusca } from "./formulario-busca";
 
 export const metadata: Metadata = { title: "Painel | Controle de Alunos" };
@@ -30,7 +25,6 @@ export default async function PaginaPainel() {
       include: {
         aluno: { select: { id: true, nome: true } },
         area: { select: { nome: true } },
-        pontuacoes: { select: { valor: true } },
       },
     }),
     prisma.matricula.count(),
@@ -96,12 +90,7 @@ export default async function PaginaPainel() {
               <p className="texto-apoio mt-3">Você ainda não avaliou nenhum aluno.</p>
             ) : (
               <ul className="mt-4 space-y-3">
-                {avaliacoes.map((avaliacao) => {
-                  const media = mediaAritmetica(
-                    avaliacao.pontuacoes.map((p) => Number(p.valor)),
-                  );
-
-                  return (
+                {avaliacoes.map((avaliacao) => (
                     <li key={avaliacao.id} className="flex items-start justify-between gap-3">
                       <div>
                         <Link
@@ -111,16 +100,14 @@ export default async function PaginaPainel() {
                           {avaliacao.aluno.nome}
                         </Link>
                         <p className="text-xs text-slate-500">
-                          {avaliacao.area.nome} · nota{" "}
-                          {media === null ? "--" : formatarNota(media)}
+                          {avaliacao.area.nome} · nota {formatarNota(Number(avaliacao.nota))}
                         </p>
                       </div>
                       <span className="shrink-0 text-xs text-slate-400">
                         {formatarDataHora(avaliacao.dataEnvio)}
                       </span>
                     </li>
-                  );
-                })}
+                ))}
               </ul>
             )}
           </div>

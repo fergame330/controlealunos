@@ -10,11 +10,10 @@ import {
   formatarData,
   formatarMinutos,
   formatarNota,
-  mediaAritmetica,
   resumirNotas,
 } from "@/lib/utils";
 import { excluirAvaliacao, excluirFrequencia } from "./actions";
-import { FormularioAvaliacao, type ItemCompetencia } from "./formulario-avaliacao";
+import { FormularioAvaliacao } from "./formulario-avaliacao";
 import { FormularioFrequencia } from "./formulario-frequencia";
 
 type Aba = "frequencia" | "nota";
@@ -53,7 +52,6 @@ export default async function PaginaAluno({
         include: {
           area: { select: { id: true, nome: true } },
           preceptor: { select: { id: true, nome: true } },
-          pontuacoes: { include: { competencia: true } },
         },
       },
     },
@@ -65,38 +63,23 @@ export default async function PaginaAluno({
 
   const totalMinutos = aluno.frequencias.reduce((total, f) => total + f.cargaHoraria, 0);
 
-  // Cada avaliação vale a média das suas competências; a área vale a média das
-  // avaliações feitas nela; a nota final vale a média de todas as avaliações.
+  // O banco guarda a nota de cada preceptor; a área é a média dessas notas e a
+  // nota final é a média de todas as avaliações.
   const avaliacoes = aluno.avaliacoes.map((avaliacao) => ({
     ...avaliacao,
-    media: mediaAritmetica(avaliacao.pontuacoes.map((p) => Number(p.valor))) ?? 0,
+    valor: Number(avaliacao.nota),
   }));
 
   const { porArea, notaFinal, totalAvaliacoes } = resumirNotas(
-    avaliacoes.map((a) => ({ areaId: a.area.id, areaNome: a.area.nome, media: a.media })),
+    avaliacoes.map((a) => ({ areaId: a.area.id, areaNome: a.area.nome, media: a.valor })),
   );
 
-  const [areas, competencias] = await Promise.all([
-    prisma.area.findMany({ orderBy: { nome: "asc" } }),
-    prisma.competencia.findMany({ orderBy: { ordem: "asc" } }),
-  ]);
-
+  const areas = await prisma.area.findMany({ orderBy: { nome: "asc" } });
   const area = areas.find((a) => a.id === areaSelecionada) ?? null;
 
   const minhaAvaliacao = area
     ? avaliacoes.find((a) => a.area.id === area.id && a.preceptor.id === usuario.id)
     : undefined;
-
-  const minhasNotas = new Map(
-    (minhaAvaliacao?.pontuacoes ?? []).map((p) => [p.competenciaId, Number(p.valor)]),
-  );
-
-  const itensFormulario: ItemCompetencia[] = competencias.map((competencia) => ({
-    id: competencia.id,
-    grupo: competencia.grupo,
-    nome: competencia.nome,
-    valor: minhasNotas.get(competencia.id) ?? null,
-  }));
 
   return (
     <div className="space-y-6">
@@ -302,8 +285,7 @@ export default async function PaginaAluno({
                       alunoId={aluno.id}
                       areaId={area.id}
                       areaNome={area.nome}
-                      competencias={itensFormulario}
-                      jaAvaliada={Boolean(minhaAvaliacao)}
+                      notaAtual={minhaAvaliacao ? minhaAvaliacao.valor : null}
                     />
                   ) : (
                     <p className="texto-apoio">
@@ -360,7 +342,6 @@ export default async function PaginaAluno({
                           <tr>
                             <th>Preceptor</th>
                             <th>Nota</th>
-                            <th>Competências</th>
                             <th>Registro</th>
                             {usuario.administrador ? <th className="text-right">Ações</th> : null}
                           </tr>
@@ -379,10 +360,7 @@ export default async function PaginaAluno({
                                   ) : null}
                                 </td>
                                 <td className="font-semibold text-slate-900">
-                                  {formatarNota(avaliacao.media)}
-                                </td>
-                                <td className="text-slate-500">
-                                  {avaliacao.pontuacoes.length}
+                                  {formatarNota(avaliacao.valor)}
                                 </td>
                                 <td>
                                   <Auditoria
@@ -411,45 +389,6 @@ export default async function PaginaAluno({
                       </table>
                     </div>
 
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
-                        Ver notas por competência
-                      </summary>
-                      <div className="mt-2 overflow-x-auto">
-                        <table className="tabela">
-                          <thead>
-                            <tr>
-                              <th>Competência</th>
-                              {avaliacoes
-                                .filter((a) => a.area.id === resumo.areaId)
-                                .map((a) => (
-                                  <th key={a.id}>{a.preceptor.nome.split(" ")[0]}</th>
-                                ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {competencias.map((competencia) => (
-                              <tr key={competencia.id}>
-                                <td className="text-slate-700">{competencia.nome}</td>
-                                {avaliacoes
-                                  .filter((a) => a.area.id === resumo.areaId)
-                                  .map((a) => {
-                                    const nota = a.pontuacoes.find(
-                                      (p) => p.competenciaId === competencia.id,
-                                    );
-
-                                    return (
-                                      <td key={a.id}>
-                                        {nota ? formatarNota(Number(nota.valor)) : "--"}
-                                      </td>
-                                    );
-                                  })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </details>
                   </div>
                 ))}
               </div>

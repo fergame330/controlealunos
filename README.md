@@ -47,9 +47,9 @@ nota final do aluno       = média das notas de todos os preceptores
 A nota final é a média de **todas as avaliações**, não a média das áreas. Uma
 área avaliada por dois preceptores entra com duas notas na conta.
 
-Cada preceptor tem uma avaliação por área: salvar de novo substitui as notas
+Cada preceptor tem uma avaliação por área: salvar de novo substitui a nota
 dele, sem alterar as dos outros. As competências são fixas e ficam em
-`prisma/seed.ts`:
+`src/lib/competencias.ts`:
 
 | Grupo | Competências |
 | --- | --- |
@@ -60,6 +60,12 @@ dele, sem alterar as dos outros. As competências são fixas e ficam em
 
 Os quatro grupos são apenas títulos de seção — quem recebe nota são as 14
 competências.
+
+**O banco guarda apenas a nota de cada preceptor**, não as notas competência a
+competência: a média é calculada no envio do formulário e só ela é gravada. Em
+troca da simplicidade, não há histórico de em qual competência o aluno foi bem
+ou mal, e reavaliar uma área exige preencher a lista inteira de novo — não há o
+que pré-preencher.
 
 ### Auditoria
 
@@ -177,15 +183,14 @@ for para um host serverless.
 | `npm run typecheck`  | Checagem de tipos do TypeScript                  |
 | `npm run db:migrate` | Aplica as migrations no banco                    |
 | `npm run db:push`    | Sincroniza o schema sem migration (só em dev)    |
-| `npm run db:seed`    | Administrador inicial e lista de competências    |
+| `npm run db:seed`    | Cria/atualiza o administrador inicial            |
 | `npm run db:studio`  | Abre o Prisma Studio                             |
 
 ## Estrutura
 
 ```
 prisma/
-  schema.prisma            Usuario, Matricula, Frequencia, Area, Competencia,
-                           Avaliacao, Pontuacao
+  schema.prisma            Usuario, Matricula, Frequencia, Area, Avaliacao
   migrations/              migration inicial versionada (PostgreSQL)
   seed.ts                  administrador inicial (e dados de exemplo opcionais)
 src/
@@ -201,6 +206,7 @@ src/
   lib/
     auth.ts                sessão, hash de senha, exigirUsuario/exigirAdministrador
     session.ts             assinatura e leitura do JWT (compatível com o middleware)
+    competencias.ts        lista fixa das 14 competências, agrupada
     request-info.ts        IP, navegador, SO e dispositivo para a auditoria
     utils.ts               CPF, horários, formatação e cálculo da nota final
 ```
@@ -224,9 +230,11 @@ src/
   valor formatado (`4h 30min`).
 - **Escala das notas de 0 a 10**, definida em `src/lib/constantes.ts`. Não
   existe peso: toda competência vale o mesmo na média.
-- **A lista de competências vive no banco**, populada pelo seed a cada
-  execução. Para mudar a lista, edite `COMPETENCIAS` em `prisma/seed.ts` e rode
-  `npm run db:seed` de novo — o seed faz upsert pelo nome.
+- **A lista de competências vive no código**, em `src/lib/competencias.ts`.
+  Para mudar a lista, edite `GRUPOS_COMPETENCIAS` — nada precisa ser rodado no
+  banco, já que só a média é gravada. Alterar a lista não recalcula avaliações
+  antigas: a nota delas continua sendo a média das competências que valiam na
+  época.
 - **Data referente em UTC.** É gravada à meia-noite UTC e formatada com
   `timeZone: "UTC"`, para que o fuso do servidor não mude o dia registrado.
 - **CPF** é armazenado apenas com dígitos e exibido formatado; a busca aceita as

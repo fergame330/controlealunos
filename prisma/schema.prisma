@@ -65,20 +65,9 @@ model Area {
   avaliacoes Avaliacao[]
 }
 
-/// Lista fixa de competências avaliadas, agrupada por bloco. Populada pelo seed.
-model Competencia {
-  id    String @id @default(cuid())
-  grupo String @db.VarChar(60)
-  nome  String @unique @db.VarChar(160)
-  ordem Int    @db.SmallInt
-
-  pontuacoes Pontuacao[]
-
-  @@index([ordem])
-}
-
-/// Avaliação de um aluno, em uma área, por um preceptor. Cada preceptor tem uma
-/// avaliação por área; a nota da área é a média das avaliações dos preceptores.
+/// Avaliação de um aluno, em uma área, por um preceptor. Guarda apenas a nota
+/// resultante: a lista de competências vive em src/lib/competencias.ts e a
+/// média delas é calculada no envio do formulário.
 model Avaliacao {
   id          String    @id @default(cuid())
   alunoId     String
@@ -87,30 +76,15 @@ model Avaliacao {
   area        Area      @relation(fields: [areaId], references: [id], onDelete: Restrict)
   preceptorId String
   preceptor   Usuario   @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
+  nota        Decimal   @db.Decimal(5, 2)
   dataEnvio   DateTime  @default(now()) @db.Timestamptz(3)
   ip          String    @db.VarChar(45)
   browser     String    @db.VarChar(120)
   os          String    @db.VarChar(120)
   dispositivo String    @db.VarChar(120)
 
-  pontuacoes Pontuacao[]
-
   @@unique([alunoId, areaId, preceptorId])
   @@index([alunoId])
   @@index([areaId])
   @@index([preceptorId])
-}
-
-/// Nota de uma competência dentro de uma avaliação. Todas valem o mesmo:
-/// não há peso, a nota da avaliação é a média aritmética das pontuações.
-model Pontuacao {
-  id            String      @id @default(cuid())
-  avaliacaoId   String
-  avaliacao     Avaliacao   @relation(fields: [avaliacaoId], references: [id], onDelete: Cascade)
-  competenciaId String
-  competencia   Competencia @relation(fields: [competenciaId], references: [id], onDelete: Restrict)
-  valor         Decimal     @db.Decimal(5, 2)
-
-  @@unique([avaliacaoId, competenciaId])
-  @@index([avaliacaoId])
 }
