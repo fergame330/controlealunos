@@ -12,6 +12,7 @@ export default async function LayoutPainel({
   if (usuario.administrador) {
     itens.push(
       { href: "/admin/alunos", rotulo: "Alunos" },
+      { href: "/admin/areas", rotulo: "Áreas" },
       { href: "/admin/preceptores", rotulo: "Preceptores" },
     );
   }

@@ -18,7 +18,7 @@ model Usuario {
   atualizadoEm  DateTime @updatedAt @db.Timestamptz(3)
 
   frequencias Frequencia[]
-  pontuacoes  Pontuacao[]
+  avaliacoes  Avaliacao[]
 }
 
 model Matricula {
@@ -30,7 +30,7 @@ model Matricula {
   atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
 
   frequencias Frequencia[]
-  nota        Nota?
+  avaliacoes  Avaliacao[]
 
   @@index([nome])
 }
@@ -55,32 +55,62 @@ model Frequencia {
   @@index([preceptorId])
 }
 
-model Nota {
-  id           String    @id @default(cuid())
-  alunoId      String    @unique
-  aluno        Matricula @relation(fields: [alunoId], references: [id], onDelete: Cascade)
-  criadoEm     DateTime  @default(now()) @db.Timestamptz(3)
-  atualizadoEm DateTime  @updatedAt @db.Timestamptz(3)
+/// Área de estágio na qual o aluno é avaliado. Cadastrada pelo administrador.
+model Area {
+  id           String   @id @default(cuid())
+  nome         String   @unique @db.VarChar(120)
+  criadoEm     DateTime @default(now()) @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
 
-  pontuacoes Pontuacao[]
+  avaliacoes Avaliacao[]
 }
 
-model Pontuacao {
-  id          String   @id @default(cuid())
-  notaId      String
-  nota        Nota     @relation(fields: [notaId], references: [id], onDelete: Cascade)
-  preceptorId String
-  preceptor   Usuario  @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
-  dataEnvio   DateTime @default(now()) @db.Timestamptz(3)
-  ip          String   @db.VarChar(45)
-  browser     String   @db.VarChar(120)
-  os          String   @db.VarChar(120)
-  dispositivo String   @db.VarChar(120)
-  nome        String   @db.VarChar(120)
-  valor       Decimal  @db.Decimal(5, 2)
-  peso        Int      @default(1) @db.SmallInt
+/// Lista fixa de competências avaliadas, agrupada por bloco. Populada pelo seed.
+model Competencia {
+  id    String @id @default(cuid())
+  grupo String @db.VarChar(60)
+  nome  String @unique @db.VarChar(160)
+  ordem Int    @db.SmallInt
 
-  @@index([notaId])
+  pontuacoes Pontuacao[]
+
+  @@index([ordem])
+}
+
+/// Avaliação de um aluno, em uma área, por um preceptor. Cada preceptor tem uma
+/// avaliação por área; a nota da área é a média das avaliações dos preceptores.
+model Avaliacao {
+  id          String    @id @default(cuid())
+  alunoId     String
+  aluno       Matricula @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  areaId      String
+  area        Area      @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  preceptorId String
+  preceptor   Usuario   @relation(fields: [preceptorId], references: [id], onDelete: Restrict)
+  dataEnvio   DateTime  @default(now()) @db.Timestamptz(3)
+  ip          String    @db.VarChar(45)
+  browser     String    @db.VarChar(120)
+  os          String    @db.VarChar(120)
+  dispositivo String    @db.VarChar(120)
+
+  pontuacoes Pontuacao[]
+
+  @@unique([alunoId, areaId, preceptorId])
+  @@index([alunoId])
+  @@index([areaId])
   @@index([preceptorId])
 }
 
+/// Nota de uma competência dentro de uma avaliação. Todas valem o mesmo:
+/// não há peso, a nota da avaliação é a média aritmética das pontuações.
+model Pontuacao {
+  id            String      @id @default(cuid())
+  avaliacaoId   String
+  avaliacao     Avaliacao   @relation(fields: [avaliacaoId], references: [id], onDelete: Cascade)
+  competenciaId String
+  competencia   Competencia @relation(fields: [competenciaId], references: [id], onDelete: Restrict)
+  valor         Decimal     @db.Decimal(5, 2)
+
+  @@unique([avaliacaoId, competenciaId])
+  @@index([avaliacaoId])
+}

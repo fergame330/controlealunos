@@ -17,6 +17,9 @@ TypeScript. A autenticação é própria (senha com bcrypt + sessão JWT em cook
   concede/remove a permissão de administrador.
 - Cadastra, edita e remove **alunos** em `/admin/alunos`: nome, número de
   matrícula e CPF (com validação dos dígitos verificadores).
+- Cadastra e renomeia as **áreas** em `/admin/areas`. Sem pelo menos uma área,
+  os preceptores não conseguem avaliar. Uma área que já tem avaliações não pode
+  ser excluída.
 - Faz tudo o que um preceptor faz e, além disso, é o único que pode **excluir**
   frequências e pontuações já lançadas.
 
@@ -30,19 +33,37 @@ fim. A **carga horária** é calculada automaticamente a partir do intervalo e p
 ser ajustada para baixo (por exemplo, descontando um intervalo), nunca para além
 do período informado.
 
-**Nota** — atribui uma nota (0 a 10) e um **peso** a cada competência avaliada. A
-nota final é a **média ponderada** de todas as pontuações:
+**Nota** — escolhe a **área** e dá nota (0 a 10) a **todas as 14 competências**
+da lista fixa. Não há peso: toda competência vale o mesmo.
+
+O cálculo tem três níveis:
 
 ```
-nota final = Σ (valor × peso) ÷ Σ (pesos)
+nota do preceptor na área = média das 14 competências
+nota da área              = média das notas dos preceptores que avaliaram nela
+nota final do aluno       = média das notas de todos os preceptores
 ```
 
-A tela mostra a memória de cálculo (soma ponderada / soma dos pesos) e a
-contribuição de cada competência.
+A nota final é a média de **todas as avaliações**, não a média das áreas. Uma
+área avaliada por dois preceptores entra com duas notas na conta.
+
+Cada preceptor tem uma avaliação por área: salvar de novo substitui as notas
+dele, sem alterar as dos outros. As competências são fixas e ficam em
+`prisma/seed.ts`:
+
+| Grupo | Competências |
+| --- | --- |
+| Frequência | Assiduidade · Pontualidade |
+| Aprendizado | Conhecimento teórico · Conhecimento prático · Busca ativa por conhecimento · Evolução do conhecimento durante o estágio |
+| Comunicação | Relação com pacientes e acompanhantes · Relação com outros estudantes e profissionais da mesma ou de outras áreas |
+| Conduta | Interesse · Capacidade de tomar iniciativa · Postura ética/humanista com o paciente · Dedicação ao paciente (tentar garantir assistência) · Responsabilidade com suas tarefas · Postura crítica diante da dinâmica de trabalho e assistência do serviço |
+
+Os quatro grupos são apenas títulos de seção — quem recebe nota são as 14
+competências.
 
 ### Auditoria
 
-Todo lançamento de frequência ou pontuação grava, junto com o registro, **quem
+Todo lançamento de frequência ou avaliação grava, junto com o registro, **quem
 lançou** e **de onde**: preceptor, data e hora do envio, IP, navegador, sistema
 operacional e tipo de dispositivo. Essas informações aparecem na coluna
 *Registro* de cada tabela.
@@ -156,14 +177,15 @@ for para um host serverless.
 | `npm run typecheck`  | Checagem de tipos do TypeScript                  |
 | `npm run db:migrate` | Aplica as migrations no banco                    |
 | `npm run db:push`    | Sincroniza o schema sem migration (só em dev)    |
-| `npm run db:seed`    | Cria/atualiza o administrador inicial            |
+| `npm run db:seed`    | Administrador inicial e lista de competências    |
 | `npm run db:studio`  | Abre o Prisma Studio                             |
 
 ## Estrutura
 
 ```
 prisma/
-  schema.prisma            modelos Usuario, Matricula, Frequencia, Nota, Pontuacao
+  schema.prisma            Usuario, Matricula, Frequencia, Area, Competencia,
+                           Avaliacao, Pontuacao
   migrations/              migration inicial versionada (PostgreSQL)
   seed.ts                  administrador inicial (e dados de exemplo opcionais)
 src/
@@ -175,6 +197,7 @@ src/
       alunos/[id]/         abas de frequência e nota + lançamentos
       admin/preceptores/   cadastro de acessos
       admin/alunos/        cadastro de alunos
+      admin/areas/         cadastro de áreas
   lib/
     auth.ts                sessão, hash de senha, exigirUsuario/exigirAdministrador
     session.ts             assinatura e leitura do JWT (compatível com o middleware)
@@ -199,8 +222,11 @@ src/
 - **Carga horária em minutos.** O schema define `cargaHoraria Int`; guardar
   minutos permite registrar meia hora sem perder precisão. A interface mostra o
   valor formatado (`4h 30min`).
-- **Escala das notas de 0 a 10**, com peso inteiro de 1 a 100. Ambos os limites
-  ficam em `src/lib/constantes.ts`.
+- **Escala das notas de 0 a 10**, definida em `src/lib/constantes.ts`. Não
+  existe peso: toda competência vale o mesmo na média.
+- **A lista de competências vive no banco**, populada pelo seed a cada
+  execução. Para mudar a lista, edite `COMPETENCIAS` em `prisma/seed.ts` e rode
+  `npm run db:seed` de novo — o seed faz upsert pelo nome.
 - **Data referente em UTC.** É gravada à meia-noite UTC e formatada com
   `timeZone: "UTC"`, para que o fuso do servidor não mude o dia registrado.
 - **CPF** é armazenado apenas com dígitos e exibido formatado; a busca aceita as

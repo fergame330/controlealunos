@@ -19,7 +19,7 @@ export default async function PaginaPreceptores({
   const usuarios = await prisma.usuario.findMany({
     orderBy: [{ administrador: "desc" }, { nome: "asc" }],
     include: {
-      _count: { select: { frequencias: true, pontuacoes: true } },
+      _count: { select: { frequencias: true, avaliacoes: true } },
     },
   });
 
@@ -87,7 +87,7 @@ export default async function PaginaPreceptores({
                     </span>
                   </td>
                   <td className="text-slate-500">
-                    {usuario._count.frequencias} freq. · {usuario._count.pontuacoes} pont.
+                    {usuario._count.frequencias} freq. · {usuario._count.avaliacoes} aval.
                   </td>
                   <td className="text-slate-500">{formatarDataHora(usuario.criadoEm)}</td>
                   <td>

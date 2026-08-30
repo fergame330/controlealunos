@@ -34,8 +34,7 @@ export default async function PaginaAlunos({
     orderBy: { nome: "asc" },
     take: 200,
     include: {
-      _count: { select: { frequencias: true } },
-      nota: { select: { _count: { select: { pontuacoes: true } } } },
+      _count: { select: { frequencias: true, avaliacoes: true } },
     },
   });
 
@@ -105,7 +104,7 @@ export default async function PaginaAlunos({
               </thead>
               <tbody>
                 {alunos.map((aluno) => {
-                  const pontuacoes = aluno.nota?._count.pontuacoes ?? 0;
+                  const avaliacoes = aluno._count.avaliacoes;
 
                   return (
                     <tr key={aluno.id}>
@@ -113,7 +112,7 @@ export default async function PaginaAlunos({
                       <td>{aluno.matricula}</td>
                       <td>{formatarCpf(aluno.cpf)}</td>
                       <td className="text-slate-500">
-                        {aluno._count.frequencias} freq. · {pontuacoes} pont.
+                        {aluno._count.frequencias} freq. · {avaliacoes} aval.
                       </td>
                       <td>
                         <AcoesAluno
@@ -121,7 +120,7 @@ export default async function PaginaAlunos({
                           nome={aluno.nome}
                           matricula={aluno.matricula}
                           cpf={aluno.cpf}
-                          lancamentos={aluno._count.frequencias + pontuacoes}
+                          lancamentos={aluno._count.frequencias + avaliacoes}
                         />
                       </td>
                     </tr>

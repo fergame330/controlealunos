@@ -3,7 +3,12 @@ import type { Metadata } from "next";
 
 import { exigirUsuario } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { formatarDataHora, formatarMinutos, formatarNota } from "@/lib/utils";
+import {
+  formatarDataHora,
+  formatarMinutos,
+  formatarNota,
+  mediaAritmetica,
+} from "@/lib/utils";
 import { FormularioBusca } from "./formulario-busca";
 
 export const metadata: Metadata = { title: "Painel | Controle de Alunos" };
@@ -11,19 +16,21 @@ export const metadata: Metadata = { title: "Painel | Controle de Alunos" };
 export default async function PaginaPainel() {
   const usuario = await exigirUsuario();
 
-  const [frequencias, pontuacoes, totalAlunos] = await Promise.all([
+  const [frequencias, avaliacoes, totalAlunos] = await Promise.all([
     prisma.frequencia.findMany({
       where: { preceptorId: usuario.id },
       orderBy: { dataEnvio: "desc" },
       take: 5,
       include: { aluno: { select: { id: true, nome: true, matricula: true } } },
     }),
-    prisma.pontuacao.findMany({
+    prisma.avaliacao.findMany({
       where: { preceptorId: usuario.id },
       orderBy: { dataEnvio: "desc" },
       take: 5,
       include: {
-        nota: { include: { aluno: { select: { id: true, nome: true, matricula: true } } } },
+        aluno: { select: { id: true, nome: true } },
+        area: { select: { nome: true } },
+        pontuacoes: { select: { valor: true } },
       },
     }),
     prisma.matricula.count(),
@@ -83,31 +90,37 @@ export default async function PaginaPainel() {
 
         <section className="cartao">
           <div className="cartao-corpo">
-            <h2 className="titulo-secao">Suas últimas pontuações</h2>
+            <h2 className="titulo-secao">Suas últimas avaliações</h2>
 
-            {pontuacoes.length === 0 ? (
-              <p className="texto-apoio mt-3">Você ainda não lançou pontuações.</p>
+            {avaliacoes.length === 0 ? (
+              <p className="texto-apoio mt-3">Você ainda não avaliou nenhum aluno.</p>
             ) : (
               <ul className="mt-4 space-y-3">
-                {pontuacoes.map((pontuacao) => (
-                  <li key={pontuacao.id} className="flex items-start justify-between gap-3">
-                    <div>
-                      <Link
-                        href={`/alunos/${pontuacao.nota.aluno.id}?aba=nota`}
-                        className="text-sm font-medium text-indigo-700 hover:underline"
-                      >
-                        {pontuacao.nota.aluno.nome}
-                      </Link>
-                      <p className="text-xs text-slate-500">
-                        {pontuacao.nome} · nota {formatarNota(Number(pontuacao.valor))} · peso{" "}
-                        {pontuacao.peso}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-xs text-slate-400">
-                      {formatarDataHora(pontuacao.dataEnvio)}
-                    </span>
-                  </li>
-                ))}
+                {avaliacoes.map((avaliacao) => {
+                  const media = mediaAritmetica(
+                    avaliacao.pontuacoes.map((p) => Number(p.valor)),
+                  );
+
+                  return (
+                    <li key={avaliacao.id} className="flex items-start justify-between gap-3">
+                      <div>
+                        <Link
+                          href={`/alunos/${avaliacao.aluno.id}?aba=nota`}
+                          className="text-sm font-medium text-indigo-700 hover:underline"
+                        >
+                          {avaliacao.aluno.nome}
+                        </Link>
+                        <p className="text-xs text-slate-500">
+                          {avaliacao.area.nome} · nota{" "}
+                          {media === null ? "--" : formatarNota(media)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-slate-400">
+                        {formatarDataHora(avaliacao.dataEnvio)}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

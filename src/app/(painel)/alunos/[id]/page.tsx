@@ -6,15 +6,16 @@ import { BotaoExcluir } from "@/components/botao-excluir";
 import { exigirUsuario } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  calcularNotaFinal,
   formatarCpf,
   formatarData,
   formatarMinutos,
   formatarNota,
+  mediaAritmetica,
+  resumirNotas,
 } from "@/lib/utils";
-import { excluirFrequencia, excluirPontuacao } from "./actions";
+import { excluirAvaliacao, excluirFrequencia } from "./actions";
+import { FormularioAvaliacao, type ItemCompetencia } from "./formulario-avaliacao";
 import { FormularioFrequencia } from "./formulario-frequencia";
-import { FormularioPontuacao } from "./formulario-pontuacao";
 
 type Aba = "frequencia" | "nota";
 
@@ -32,11 +33,11 @@ export default async function PaginaAluno({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ aba?: string; erro?: string; sucesso?: string }>;
+  searchParams: Promise<{ aba?: string; area?: string; erro?: string; sucesso?: string }>;
 }) {
   const usuario = await exigirUsuario();
   const { id } = await params;
-  const { aba: abaBruta, erro, sucesso } = await searchParams;
+  const { aba: abaBruta, area: areaSelecionada, erro, sucesso } = await searchParams;
 
   const aba: Aba = abaBruta === "nota" ? "nota" : "frequencia";
 
@@ -47,12 +48,12 @@ export default async function PaginaAluno({
         orderBy: [{ dataReferente: "desc" }, { dataEnvio: "desc" }],
         include: { preceptor: { select: { nome: true } } },
       },
-      nota: {
+      avaliacoes: {
+        orderBy: { dataEnvio: "desc" },
         include: {
-          pontuacoes: {
-            orderBy: { dataEnvio: "desc" },
-            include: { preceptor: { select: { nome: true } } },
-          },
+          area: { select: { id: true, nome: true } },
+          preceptor: { select: { id: true, nome: true } },
+          pontuacoes: { include: { competencia: true } },
         },
       },
     },
@@ -64,12 +65,38 @@ export default async function PaginaAluno({
 
   const totalMinutos = aluno.frequencias.reduce((total, f) => total + f.cargaHoraria, 0);
 
-  const pontuacoes = (aluno.nota?.pontuacoes ?? []).map((pontuacao) => ({
-    ...pontuacao,
-    valor: Number(pontuacao.valor),
+  // Cada avaliação vale a média das suas competências; a área vale a média das
+  // avaliações feitas nela; a nota final vale a média de todas as avaliações.
+  const avaliacoes = aluno.avaliacoes.map((avaliacao) => ({
+    ...avaliacao,
+    media: mediaAritmetica(avaliacao.pontuacoes.map((p) => Number(p.valor))) ?? 0,
   }));
 
-  const { notaFinal, somaPesos, somaPonderada } = calcularNotaFinal(pontuacoes);
+  const { porArea, notaFinal, totalAvaliacoes } = resumirNotas(
+    avaliacoes.map((a) => ({ areaId: a.area.id, areaNome: a.area.nome, media: a.media })),
+  );
+
+  const [areas, competencias] = await Promise.all([
+    prisma.area.findMany({ orderBy: { nome: "asc" } }),
+    prisma.competencia.findMany({ orderBy: { ordem: "asc" } }),
+  ]);
+
+  const area = areas.find((a) => a.id === areaSelecionada) ?? null;
+
+  const minhaAvaliacao = area
+    ? avaliacoes.find((a) => a.area.id === area.id && a.preceptor.id === usuario.id)
+    : undefined;
+
+  const minhasNotas = new Map(
+    (minhaAvaliacao?.pontuacoes ?? []).map((p) => [p.competenciaId, Number(p.valor)]),
+  );
+
+  const itensFormulario: ItemCompetencia[] = competencias.map((competencia) => ({
+    id: competencia.id,
+    grupo: competencia.grupo,
+    nome: competencia.nome,
+    valor: minhasNotas.get(competencia.id) ?? null,
+  }));
 
   return (
     <div className="space-y-6">
@@ -225,98 +252,206 @@ export default async function PaginaAluno({
         <>
           <section className="cartao">
             <div className="cartao-corpo">
-              <h2 className="titulo-secao mb-1">Lançar pontuação</h2>
+              <h2 className="titulo-secao mb-1">Avaliar por área</h2>
               <p className="texto-apoio mb-4">
-                Cada competência recebe uma nota e um peso. A nota final é a média ponderada de
-                todas as pontuações.
+                Escolha a área e dê nota a todas as competências. Sua nota na área é a média
+                delas; se outros preceptores avaliarem a mesma área, a nota da área vira a média
+                entre vocês.
               </p>
-              <FormularioPontuacao alunoId={aluno.id} />
+
+              {areas.length === 0 ? (
+                <p className="alerta-info">
+                  Nenhuma área cadastrada ainda.{" "}
+                  {usuario.administrador ? (
+                    <Link href="/admin/areas" className="font-medium underline">
+                      Cadastre a primeira área
+                    </Link>
+                  ) : (
+                    "Peça ao administrador para cadastrar as áreas."
+                  )}
+                  .
+                </p>
+              ) : (
+                <>
+                  <div className="mb-5 flex flex-wrap gap-2">
+                    {areas.map((opcao) => {
+                      const avaliada = avaliacoes.some(
+                        (a) => a.area.id === opcao.id && a.preceptor.id === usuario.id,
+                      );
+
+                      return (
+                        <Link
+                          key={opcao.id}
+                          href={`/alunos/${aluno.id}?aba=nota&area=${opcao.id}`}
+                          aria-current={area?.id === opcao.id ? "true" : undefined}
+                          className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                            area?.id === opcao.id
+                              ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          {opcao.nome}
+                          {avaliada ? <span className="ml-1.5 text-emerald-600">✓</span> : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  {area ? (
+                    <FormularioAvaliacao
+                      alunoId={aluno.id}
+                      areaId={area.id}
+                      areaNome={area.nome}
+                      competencias={itensFormulario}
+                      jaAvaliada={Boolean(minhaAvaliacao)}
+                    />
+                  ) : (
+                    <p className="texto-apoio">
+                      Selecione uma área acima para lançar ou revisar as notas. O ✓ marca as
+                      áreas que você já avaliou.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           </section>
 
           <section className="cartao overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-6">
               <h2 className="titulo-secao">
-                Pontuações{" "}
-                <span className="text-sm font-normal text-slate-500">({pontuacoes.length})</span>
+                Notas por área{" "}
+                <span className="text-sm font-normal text-slate-500">
+                  ({porArea.length} {porArea.length === 1 ? "área" : "áreas"})
+                </span>
               </h2>
 
               {notaFinal === null ? null : (
                 <p className="text-sm text-slate-500">
-                  {formatarNota(somaPonderada)} / {somaPesos} ={" "}
-                  <span className="font-semibold text-slate-900">{formatarNota(notaFinal)}</span>
+                  Nota final{" "}
+                  <span className="font-semibold text-slate-900">{formatarNota(notaFinal)}</span>{" "}
+                  — média de {totalAvaliacoes}{" "}
+                  {totalAvaliacoes === 1 ? "avaliação" : "avaliações"}
                 </p>
               )}
             </div>
 
-            {pontuacoes.length === 0 ? (
+            {porArea.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-slate-500 sm:px-6">
-                Nenhuma pontuação registrada para este aluno.
+                Nenhuma avaliação registrada para este aluno.
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="tabela">
-                  <thead>
-                    <tr>
-                      <th>Competência</th>
-                      <th>Nota</th>
-                      <th>Peso</th>
-                      <th>Contribuição</th>
-                      <th>Preceptor</th>
-                      <th>Registro</th>
-                      {usuario.administrador ? <th className="text-right">Ações</th> : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pontuacoes.map((pontuacao) => (
-                      <tr key={pontuacao.id}>
-                        <td className="font-medium text-slate-900">{pontuacao.nome}</td>
-                        <td>{formatarNota(pontuacao.valor)}</td>
-                        <td>{pontuacao.peso}</td>
-                        <td className="text-slate-500">
-                          {formatarNota(pontuacao.valor * pontuacao.peso)}
-                        </td>
-                        <td>{pontuacao.preceptor.nome}</td>
-                        <td>
-                          <Auditoria
-                            dataEnvio={pontuacao.dataEnvio}
-                            ip={pontuacao.ip}
-                            browser={pontuacao.browser}
-                            os={pontuacao.os}
-                            dispositivo={pontuacao.dispositivo}
-                          />
-                        </td>
-                        {usuario.administrador ? (
-                          <td>
-                            <div className="flex justify-end">
-                              <BotaoExcluir
-                                acao={excluirPontuacao}
-                                nomeCampo="pontuacaoId"
-                                valor={pontuacao.id}
-                                confirmacao={`Excluir a pontuação de "${pontuacao.nome}"?`}
-                              />
-                            </div>
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td className="px-4 py-3 text-sm font-semibold text-slate-700">Nota final</td>
-                      <td
-                        colSpan={usuario.administrador ? 6 : 5}
-                        className="px-4 py-3 text-sm font-semibold text-slate-900"
-                      >
-                        {notaFinal === null ? "--" : formatarNota(notaFinal)}
-                        <span className="ml-2 text-xs font-normal text-slate-500">
-                          média ponderada de {pontuacoes.length}{" "}
-                          {pontuacoes.length === 1 ? "competencia" : "competencias"}
-                        </span>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+              <div className="divide-y divide-slate-100">
+                {porArea.map((resumo) => (
+                  <div key={resumo.areaId} className="px-5 py-4 sm:px-6">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <h3 className="font-medium text-slate-900">{resumo.areaNome}</h3>
+                      <p className="text-sm text-slate-500">
+                        <span className="font-semibold text-slate-900">
+                          {formatarNota(resumo.media)}
+                        </span>{" "}
+                        · {resumo.avaliacoes}{" "}
+                        {resumo.avaliacoes === 1 ? "preceptor" : "preceptores"}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="tabela">
+                        <thead>
+                          <tr>
+                            <th>Preceptor</th>
+                            <th>Nota</th>
+                            <th>Competências</th>
+                            <th>Registro</th>
+                            {usuario.administrador ? <th className="text-right">Ações</th> : null}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {avaliacoes
+                            .filter((a) => a.area.id === resumo.areaId)
+                            .map((avaliacao) => (
+                              <tr key={avaliacao.id}>
+                                <td className="font-medium text-slate-900">
+                                  {avaliacao.preceptor.nome}
+                                  {avaliacao.preceptor.id === usuario.id ? (
+                                    <span className="ml-2 text-xs font-normal text-slate-400">
+                                      (você)
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td className="font-semibold text-slate-900">
+                                  {formatarNota(avaliacao.media)}
+                                </td>
+                                <td className="text-slate-500">
+                                  {avaliacao.pontuacoes.length}
+                                </td>
+                                <td>
+                                  <Auditoria
+                                    dataEnvio={avaliacao.dataEnvio}
+                                    ip={avaliacao.ip}
+                                    browser={avaliacao.browser}
+                                    os={avaliacao.os}
+                                    dispositivo={avaliacao.dispositivo}
+                                  />
+                                </td>
+                                {usuario.administrador ? (
+                                  <td>
+                                    <div className="flex justify-end">
+                                      <BotaoExcluir
+                                        acao={excluirAvaliacao}
+                                        nomeCampo="avaliacaoId"
+                                        valor={avaliacao.id}
+                                        confirmacao={`Excluir a avaliação de ${avaliacao.preceptor.nome} em ${avaliacao.area.nome}?`}
+                                      />
+                                    </div>
+                                  </td>
+                                ) : null}
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                        Ver notas por competência
+                      </summary>
+                      <div className="mt-2 overflow-x-auto">
+                        <table className="tabela">
+                          <thead>
+                            <tr>
+                              <th>Competência</th>
+                              {avaliacoes
+                                .filter((a) => a.area.id === resumo.areaId)
+                                .map((a) => (
+                                  <th key={a.id}>{a.preceptor.nome.split(" ")[0]}</th>
+                                ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {competencias.map((competencia) => (
+                              <tr key={competencia.id}>
+                                <td className="text-slate-700">{competencia.nome}</td>
+                                {avaliacoes
+                                  .filter((a) => a.area.id === resumo.areaId)
+                                  .map((a) => {
+                                    const nota = a.pontuacoes.find(
+                                      (p) => p.competenciaId === competencia.id,
+                                    );
+
+                                    return (
+                                      <td key={a.id}>
+                                        {nota ? formatarNota(Number(nota.valor)) : "--"}
+                                      </td>
+                                    );
+                                  })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </div>
+                ))}
               </div>
             )}
           </section>

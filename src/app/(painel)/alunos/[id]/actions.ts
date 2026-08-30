@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { exigirAdministrador, exigirUsuario } from "@/lib/auth";
-import { NOTA_MAXIMA, NOTA_MINIMA, PESO_MAXIMO } from "@/lib/constantes";
+import { NOTA_MAXIMA, NOTA_MINIMA } from "@/lib/constantes";
 import { prisma } from "@/lib/prisma";
 import { dadosDaRequisicao } from "@/lib/request-info";
 import { dataDoFormulario, horarioValido, minutosEntre } from "@/lib/utils";
@@ -94,63 +94,93 @@ export async function registrarFrequencia(
   return { sucesso: "Frequência registrada." };
 }
 
-export async function registrarPontuacao(
+/**
+ * Grava a avaliação de um aluno em uma área. Cada preceptor tem uma avaliação
+ * por área — reenviar o formulário substitui as notas anteriores dele, sem
+ * afetar as de outros preceptores.
+ */
+export async function salvarAvaliacao(
   _estadoAnterior: EstadoLancamento,
   formData: FormData,
 ): Promise<EstadoLancamento> {
   const usuario = await exigirUsuario();
 
   const alunoId = String(formData.get("alunoId") ?? "");
-  const nome = String(formData.get("nome") ?? "").trim().replace(/\s+/g, " ");
-  const valor = lerDecimal(String(formData.get("valor") ?? ""));
-  const peso = Number(String(formData.get("peso") ?? "1").trim());
+  const areaId = String(formData.get("areaId") ?? "");
 
   if (!alunoId) return { erro: "Aluno não informado." };
+  if (!areaId) return { erro: "Escolha a área da avaliação." };
 
-  if (nome.length < 2) {
-    return { erro: "Informe o nome da competência avaliada." };
-  }
-
-  if (valor === null || valor < NOTA_MINIMA || valor > NOTA_MAXIMA) {
-    return { erro: `A nota deve ser um número entre ${NOTA_MINIMA} e ${NOTA_MAXIMA}.` };
-  }
-
-  if (!Number.isInteger(peso) || peso < 1 || peso > PESO_MAXIMO) {
-    return { erro: `O peso deve ser um número inteiro entre 1 e ${PESO_MAXIMO}.` };
-  }
-
-  const aluno = await prisma.matricula.findUnique({ where: { id: alunoId }, select: { id: true } });
+  const [aluno, area, competencias] = await Promise.all([
+    prisma.matricula.findUnique({ where: { id: alunoId }, select: { id: true } }),
+    prisma.area.findUnique({ where: { id: areaId }, select: { id: true, nome: true } }),
+    prisma.competencia.findMany({ orderBy: { ordem: "asc" } }),
+  ]);
 
   if (!aluno) return { erro: "Aluno não encontrado." };
+  if (!area) return { erro: "Área não encontrada." };
+
+  if (competencias.length === 0) {
+    return { erro: "Nenhuma competência cadastrada. Rode o seed do banco." };
+  }
+
+  // Todas as competências são obrigatórias: a nota da avaliação é a média
+  // delas, e uma lista pela metade produziria uma média enganosa.
+  const notas: Array<{ competenciaId: string; valor: number }> = [];
+
+  for (const competencia of competencias) {
+    const bruto = String(formData.get(`competencia-${competencia.id}`) ?? "").trim();
+
+    if (bruto === "") {
+      return { erro: `Informe a nota de "${competencia.nome}".` };
+    }
+
+    const valor = lerDecimal(bruto);
+
+    if (valor === null || valor < NOTA_MINIMA || valor > NOTA_MAXIMA) {
+      return {
+        erro: `A nota de "${competencia.nome}" deve ser um número entre ${NOTA_MINIMA} e ${NOTA_MAXIMA}.`,
+      };
+    }
+
+    notas.push({ competenciaId: competencia.id, valor });
+  }
 
   const auditoria = await dadosDaRequisicao();
 
-  // A ficha de notas do aluno é criada na primeira pontuação lançada.
-  const nota = await prisma.nota.upsert({
-    where: { alunoId: aluno.id },
-    update: {},
-    create: { alunoId: aluno.id },
-    select: { id: true },
-  });
+  await prisma.$transaction(async (tx) => {
+    const avaliacao = await tx.avaliacao.upsert({
+      where: {
+        alunoId_areaId_preceptorId: {
+          alunoId: aluno.id,
+          areaId: area.id,
+          preceptorId: usuario.id,
+        },
+      },
+      update: { dataEnvio: new Date(), ...auditoria },
+      create: {
+        alunoId: aluno.id,
+        areaId: area.id,
+        preceptorId: usuario.id,
+        ...auditoria,
+      },
+      select: { id: true },
+    });
 
-  await prisma.pontuacao.create({
-    data: {
-      notaId: nota.id,
-      preceptorId: usuario.id,
-      nome,
-      valor: valor.toFixed(2),
-      peso,
-      ...auditoria,
-    },
+    await tx.pontuacao.deleteMany({ where: { avaliacaoId: avaliacao.id } });
+    await tx.pontuacao.createMany({
+      data: notas.map((nota) => ({
+        avaliacaoId: avaliacao.id,
+        competenciaId: nota.competenciaId,
+        valor: nota.valor.toFixed(2),
+      })),
+    });
   });
-
-  // Marca a ficha como atualizada para refletir o ultimo lançamento.
-  await prisma.nota.update({ where: { id: nota.id }, data: { atualizadoEm: new Date() } });
 
   revalidatePath(`/alunos/${aluno.id}`);
   revalidatePath("/painel");
 
-  return { sucesso: `Pontuação de "${nome}" registrada.` };
+  return { sucesso: `Avaliação de ${area.nome} registrada.` };
 }
 
 export async function excluirFrequencia(formData: FormData): Promise<void> {
@@ -172,21 +202,27 @@ export async function excluirFrequencia(formData: FormData): Promise<void> {
   voltarCom(frequencia.alunoId, "frequencia", "Frequência excluída.", "sucesso");
 }
 
-export async function excluirPontuacao(formData: FormData): Promise<void> {
+export async function excluirAvaliacao(formData: FormData): Promise<void> {
   await exigirAdministrador();
 
-  const id = String(formData.get("pontuacaoId") ?? "");
-  const pontuacao = await prisma.pontuacao.findUnique({
+  const id = String(formData.get("avaliacaoId") ?? "");
+  const avaliacao = await prisma.avaliacao.findUnique({
     where: { id },
-    select: { id: true, nota: { select: { alunoId: true } } },
+    select: { id: true, alunoId: true, area: { select: { nome: true } } },
   });
 
-  if (!pontuacao) {
+  if (!avaliacao) {
     redirect("/painel");
   }
 
-  await prisma.pontuacao.delete({ where: { id: pontuacao.id } });
+  // As pontuações saem junto, por cascade.
+  await prisma.avaliacao.delete({ where: { id: avaliacao.id } });
 
-  revalidatePath(`/alunos/${pontuacao.nota.alunoId}`);
-  voltarCom(pontuacao.nota.alunoId, "nota", "Pontuação excluída.", "sucesso");
+  revalidatePath(`/alunos/${avaliacao.alunoId}`);
+  voltarCom(
+    avaliacao.alunoId,
+    "nota",
+    `Avaliação de ${avaliacao.area.nome} excluída.`,
+    "sucesso",
+  );
 }

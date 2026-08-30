@@ -89,26 +89,66 @@ export function formatarDataHora(data: Date): string {
   }).format(data);
 }
 
-export type PontuacaoCalculo = { valor: number; peso: number };
+/** Média aritmética, ou null quando não há valores. */
+export function mediaAritmetica(valores: number[]): number | null {
+  if (valores.length === 0) return null;
 
-export type ResultadoNota = {
+  return valores.reduce((total, valor) => total + valor, 0) / valores.length;
+}
+
+export type AvaliacaoCalculo = {
+  areaId: string;
+  areaNome: string;
+  /** Média das competências avaliadas por aquele preceptor. */
+  media: number;
+};
+
+export type ResumoArea = {
+  areaId: string;
+  areaNome: string;
+  media: number;
+  avaliacoes: number;
+};
+
+export type ResumoNotas = {
+  porArea: ResumoArea[];
+  /**
+   * Média aritmética das notas de todos os preceptores, de todas as áreas.
+   * Cada avaliação entra uma vez, sem peso.
+   */
   notaFinal: number | null;
-  somaPesos: number;
-  somaPonderada: number;
+  totalAvaliacoes: number;
 };
 
 /**
- * Nota final = soma(valor * peso) / soma(pesos).
- * Retorna notaFinal nula quando não há pontuações com peso.
+ * Agrega as avaliações de um aluno: a nota de cada área é a média das
+ * avaliações feitas nela, e a nota final é a média de todas as avaliações.
  */
-export function calcularNotaFinal(pontuacoes: PontuacaoCalculo[]): ResultadoNota {
-  const somaPesos = pontuacoes.reduce((total, p) => total + p.peso, 0);
-  const somaPonderada = pontuacoes.reduce((total, p) => total + p.valor * p.peso, 0);
+export function resumirNotas(avaliacoes: AvaliacaoCalculo[]): ResumoNotas {
+  const porAreaMap = new Map<string, { nome: string; medias: number[] }>();
+
+  for (const avaliacao of avaliacoes) {
+    const atual = porAreaMap.get(avaliacao.areaId) ?? {
+      nome: avaliacao.areaNome,
+      medias: [],
+    };
+    atual.medias.push(avaliacao.media);
+    porAreaMap.set(avaliacao.areaId, atual);
+  }
+
+  const porArea = [...porAreaMap.entries()]
+    .map(([areaId, { nome, medias }]) => ({
+      areaId,
+      areaNome: nome,
+      media: mediaAritmetica(medias) as number,
+      avaliacoes: medias.length,
+    }))
+    .sort((a, b) => a.areaNome.localeCompare(b.areaNome, "pt-BR"));
 
   return {
-    notaFinal: somaPesos > 0 ? somaPonderada / somaPesos : null,
-    somaPesos,
-    somaPonderada,
+    porArea,
+    notaFinal: mediaAritmetica(avaliacoes.map((a) => a.media)),
+    totalAvaliacoes: avaliacoes.length,
   };
 }
 
