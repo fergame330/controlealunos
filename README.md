@@ -16,7 +16,7 @@ TypeScript. A autenticação é própria (senha com bcrypt + sessão JWT em cook
   `/admin/preceptores`: nome, e-mail e senha provisória. Também redefine senhas e
   concede/remove a permissão de administrador.
 - Cadastra, edita e remove **alunos** em `/admin/alunos`: nome, número de
-  matrícula e CPF (com validação dos dígitos verificadores).
+  matrícula, CPF (com validação dos dígitos verificadores) e **foto**.
 - Cadastra e renomeia as **áreas** em `/admin/areas`. Sem pelo menos uma área,
   os preceptores não conseguem avaliar. Uma área que já tem avaliações não pode
   ser excluída.
@@ -25,7 +25,9 @@ TypeScript. A autenticação é própria (senha com bcrypt + sessão JWT em cook
 
 ### Preceptor
 
-1. Entra no painel e informa o **número de matrícula ou o CPF** do aluno.
+1. Entra no painel e busca o aluno pelo **nome**, pelo **número de matrícula**
+   ou pelo **CPF**. Matrícula ou CPF completos abrem o aluno direto; o nome
+   lista os que combinam, cada um com a **foto**, para escolher olhando.
 2. O sistema abre a tela do aluno, com duas abas:
 
 **Frequência** — informa a data referente, o horário de início e o horário de
@@ -66,6 +68,26 @@ competência: a média é calculada no envio do formulário e só ela é gravada
 troca da simplicidade, não há histórico de em qual competência o aluno foi bem
 ou mal, e reavaliar uma área exige preencher a lista inteira de novo — não há o
 que pré-preencher.
+
+### Foto do aluno
+
+A foto é opcional e aparece na busca, na listagem de alunos e no cabeçalho da
+tela do aluno. Quem não tem foto aparece com as iniciais.
+
+O navegador **recorta em quadrado e reduz para 512px** antes de enviar, então
+uma foto de celular de 4 MB chega ao servidor com algumas dezenas de KB. O
+servidor confere o formato pelos **bytes iniciais**, não pelo `content-type`
+declarado, e aceita JPEG, PNG ou WebP até 1 MB.
+
+A imagem fica no próprio PostgreSQL (`bytea`) e é servida por
+`/api/alunos/[id]/foto`, que **exige sessão** — é dado pessoal e não pode ficar
+acessível por URL solta. A URL leva `?v=<data do envio>`, então trocar a foto
+invalida o cache na hora.
+
+Guardar imagem no banco não escala para milhares de fotos grandes. Na escala
+deste sistema — uma foto pequena por aluno — evita depender de um serviço de
+storage externo e de mais credenciais para configurar. Se um dia crescer, o
+caminho é mover os bytes para um bucket e guardar só a URL.
 
 ### Auditoria
 
@@ -196,9 +218,10 @@ prisma/
 src/
   middleware.ts            primeira barreira de acesso (valida o cookie)
   app/
+    api/alunos/[id]/foto/  serve a foto do aluno (exige sessão)
     login/                 tela de login
     (painel)/
-      painel/              busca do aluno por matrícula ou CPF
+      painel/              busca do aluno por nome, matrícula ou CPF
       alunos/[id]/         abas de frequência e nota + lançamentos
       admin/preceptores/   cadastro de acessos
       admin/alunos/        cadastro de alunos
@@ -207,6 +230,7 @@ src/
     auth.ts                sessão, hash de senha, exigirUsuario/exigirAdministrador
     session.ts             assinatura e leitura do JWT (compatível com o middleware)
     competencias.ts        lista fixa das 14 competências, agrupada
+    imagem.ts              validação da foto e iniciais do avatar
     request-info.ts        IP, navegador, SO e dispositivo para a auditoria
     utils.ts               CPF, horários, formatação e cálculo da nota final
 ```

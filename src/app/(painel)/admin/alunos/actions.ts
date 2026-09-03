@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { exigirAdministrador } from "@/lib/auth";
 import { camposDuplicados } from "@/lib/erros";
+import { lerFotoEnviada } from "@/lib/imagem";
 import { prisma } from "@/lib/prisma";
 import { cpfValido, somenteDigitos } from "@/lib/utils";
 
@@ -60,8 +61,19 @@ export async function criarAluno(
 
   if ("erro" in dados) return { erro: dados.erro };
 
+  const enviada = await lerFotoEnviada(formData.get("foto"));
+
+  if ("erro" in enviada) return { erro: enviada.erro };
+
+  const foto = enviada.foto;
+
   try {
-    await prisma.matricula.create({ data: dados });
+    await prisma.matricula.create({
+      data: {
+        ...dados,
+        ...(foto ? { foto: foto.bytes, fotoTipo: foto.tipo, fotoEnviadaEm: new Date() } : {}),
+      },
+    });
   } catch (erro) {
     const campos = camposDuplicados(erro);
 
@@ -87,8 +99,24 @@ export async function atualizarAluno(
   if (!alunoId) return { erro: "Aluno não informado." };
   if ("erro" in dados) return { erro: dados.erro };
 
+  const enviada = await lerFotoEnviada(formData.get("foto"));
+
+  if ("erro" in enviada) return { erro: enviada.erro };
+
+  // Sem arquivo novo, a foto atual é mantida — a não ser que o formulário peça
+  // explicitamente para removê-la.
+  const removerFoto = formData.get("removerFoto") === "1";
+  const mudancaFoto = enviada.foto
+    ? { foto: enviada.foto.bytes, fotoTipo: enviada.foto.tipo, fotoEnviadaEm: new Date() }
+    : removerFoto
+      ? { foto: null, fotoTipo: null, fotoEnviadaEm: null }
+      : {};
+
   try {
-    await prisma.matricula.update({ where: { id: alunoId }, data: dados });
+    await prisma.matricula.update({
+      where: { id: alunoId },
+      data: { ...dados, ...mudancaFoto },
+    });
   } catch (erro) {
     const campos = camposDuplicados(erro);
 

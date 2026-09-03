@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 
 import { BotaoEnvio } from "@/components/botao-envio";
+import { CampoFoto } from "@/components/campo-foto";
 import { criarAluno, type EstadoAluno } from "./actions";
 
 const ESTADO_INICIAL: EstadoAluno = {};
@@ -18,7 +19,7 @@ export function FormularioAluno() {
   }, [estado.sucesso]);
 
   return (
-    <form ref={formulario} action={acao} className="space-y-4">
+    <form ref={formulario} action={acao} className="space-y-5">
       {estado.erro ? (
         <p className="alerta-erro" role="alert">
           {estado.erro}
@@ -30,6 +31,8 @@ export function FormularioAluno() {
           {estado.sucesso}
         </p>
       ) : null}
+
+      <CampoFoto nome="foto" campo="foto-novo" />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">

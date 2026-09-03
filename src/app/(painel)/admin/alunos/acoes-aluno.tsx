@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { BotaoEnvio } from "@/components/botao-envio";
+import { CampoFoto } from "@/components/campo-foto";
 import { atualizarAluno, excluirAluno, type EstadoAluno } from "./actions";
 
 const ESTADO_INICIAL: EstadoAluno = {};
@@ -14,9 +15,19 @@ type Props = {
   matricula: string;
   cpf: string;
   lancamentos: number;
+  temFoto: boolean;
+  fotoUrl: string | null;
 };
 
-export function AcoesAluno({ alunoId, nome, matricula, cpf, lancamentos }: Props) {
+export function AcoesAluno({
+  alunoId,
+  nome,
+  matricula,
+  cpf,
+  lancamentos,
+  temFoto,
+  fotoUrl,
+}: Props) {
   const [editando, setEditando] = useState(false);
   const [estado, acao] = useActionState(atualizarAluno, ESTADO_INICIAL);
 
@@ -56,8 +67,29 @@ export function AcoesAluno({ alunoId, nome, matricula, cpf, lancamentos }: Props
       </div>
 
       {editando ? (
-        <form action={acao} className="flex flex-wrap items-end justify-end gap-2">
+        <form action={acao} className="space-y-3 rounded-lg border border-slate-200 p-4 text-left">
           <input type="hidden" name="alunoId" value={alunoId} />
+
+          <CampoFoto
+            nome="foto"
+            campo={`foto-${alunoId}`}
+            fotoAtual={fotoUrl}
+            nomeAluno={nome}
+          />
+
+          {temFoto ? (
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                name="removerFoto"
+                value="1"
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Remover a foto atual
+            </label>
+          ) : null}
+
+          <div className="flex flex-wrap items-end gap-2">
 
           <div className="w-48">
             <label className="rotulo text-left" htmlFor={`nome-${alunoId}`}>
@@ -99,7 +131,8 @@ export function AcoesAluno({ alunoId, nome, matricula, cpf, lancamentos }: Props
             />
           </div>
 
-          <BotaoEnvio className="btn-primario px-3 py-2">Salvar</BotaoEnvio>
+            <BotaoEnvio className="btn-primario px-3 py-2">Salvar</BotaoEnvio>
+          </div>
 
           {estado.erro ? (
             <p className="w-full text-right text-xs text-red-600" role="alert">

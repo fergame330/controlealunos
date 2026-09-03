@@ -1,15 +1,31 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { redirect } from "next/navigation";
+
 import { exigirUsuario } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatarDataHora, formatarMinutos, formatarNota } from "@/lib/utils";
-import { FormularioBusca } from "./formulario-busca";
+import { CartaoAluno } from "@/components/cartao-aluno";
+import { procurarAlunos } from "./busca";
 
 export const metadata: Metadata = { title: "Painel | Controle de Alunos" };
 
-export default async function PaginaPainel() {
+export default async function PaginaPainel({
+  searchParams,
+}: {
+  searchParams: Promise<{ busca?: string }>;
+}) {
   const usuario = await exigirUsuario();
+  const { busca } = await searchParams;
+  const termo = (busca ?? "").trim();
+
+  const { alunos, correspondenciaExata } = await procurarAlunos(termo);
+
+  // Matrícula ou CPF completo levam direto ao aluno; nome abre a lista.
+  if (correspondenciaExata) {
+    redirect(`/alunos/${correspondenciaExata.id}`);
+  }
 
   const [frequencias, avaliacoes, totalAlunos] = await Promise.all([
     prisma.frequencia.findMany({
@@ -44,8 +60,52 @@ export default async function PaginaPainel() {
 
       <section className="cartao">
         <div className="cartao-corpo">
-          <h2 className="titulo-secao mb-4">Localizar aluno</h2>
-          <FormularioBusca />
+          <h2 className="titulo-secao mb-1">Localizar aluno</h2>
+          <p className="texto-apoio mb-4">
+            Busque pelo nome, pelo número de matrícula ou pelo CPF.
+          </p>
+
+          <form className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex-1">
+              <label className="sr-only" htmlFor="busca">
+                Nome, matrícula ou CPF
+              </label>
+              <input
+                id="busca"
+                name="busca"
+                className="campo"
+                placeholder="Ex.: Ana Beatriz, 2024001234 ou 123.456.789-09"
+                defaultValue={termo}
+                autoComplete="off"
+                autoFocus
+              />
+            </div>
+
+            <button type="submit" className="btn-primario">
+              Buscar
+            </button>
+          </form>
+
+          {termo ? (
+            alunos.length === 0 ? (
+              <p className="alerta-erro mt-4" role="alert">
+                Nenhum aluno encontrado para &quot;{termo}&quot;.
+              </p>
+            ) : (
+              <div className="mt-5">
+                <p className="texto-apoio mb-3">
+                  {alunos.length === 1
+                    ? "1 aluno encontrado."
+                    : `${alunos.length} alunos encontrados. Escolha pela foto.`}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {alunos.map((aluno) => (
+                    <CartaoAluno key={aluno.id} aluno={aluno} />
+                  ))}
+                </div>
+              </div>
+            )
+          ) : null}
         </div>
       </section>
 

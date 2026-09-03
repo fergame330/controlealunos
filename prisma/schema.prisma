@@ -26,6 +26,11 @@ model Matricula {
   nome         String   @db.VarChar(120)
   matricula    String   @unique @db.VarChar(30)
   cpf          String   @unique @db.Char(11)
+  /// Foto do aluno, guardada no próprio banco e servida por /api/alunos/[id]/foto.
+  /// A imagem é redimensionada no navegador antes do envio.
+  foto         Bytes?
+  fotoTipo     String?  @db.VarChar(40)
+  fotoEnviadaEm DateTime? @db.Timestamptz(3)
   criadoEm     DateTime @default(now()) @db.Timestamptz(3)
   atualizadoEm DateTime @updatedAt @db.Timestamptz(3)
 

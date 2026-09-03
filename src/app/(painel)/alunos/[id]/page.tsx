@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Auditoria } from "@/components/auditoria";
+import { AvatarAluno } from "@/components/avatar-aluno";
 import { BotaoExcluir } from "@/components/botao-excluir";
 import { exigirUsuario } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -88,10 +89,22 @@ export default async function PaginaAluno({
           <Link href="/painel" className="text-sm text-slate-500 hover:text-slate-800">
             &larr; Voltar ao painel
           </Link>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{aluno.nome}</h1>
-          <p className="texto-apoio mt-1">
-            Matrícula {aluno.matricula} · CPF {formatarCpf(aluno.cpf)}
-          </p>
+
+          <div className="mt-2 flex items-center gap-4">
+            <AvatarAluno
+              alunoId={aluno.id}
+              nome={aluno.nome}
+              fotoEnviadaEm={aluno.fotoEnviadaEm}
+              tamanho="grande"
+            />
+
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{aluno.nome}</h1>
+              <p className="texto-apoio mt-1">
+                Matrícula {aluno.matricula} · CPF {formatarCpf(aluno.cpf)}
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-3">

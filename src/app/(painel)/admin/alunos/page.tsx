@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AvatarAluno } from "@/components/avatar-aluno";
 import { exigirAdministrador } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatarCpf, somenteDigitos } from "@/lib/utils";
@@ -33,7 +34,12 @@ export default async function PaginaAlunos({
       : undefined,
     orderBy: { nome: "asc" },
     take: 200,
-    include: {
+    select: {
+      id: true,
+      nome: true,
+      matricula: true,
+      cpf: true,
+      fotoEnviadaEm: true,
       _count: { select: { frequencias: true, avaliacoes: true } },
     },
   });
@@ -95,7 +101,7 @@ export default async function PaginaAlunos({
             <table className="tabela">
               <thead>
                 <tr>
-                  <th>Nome</th>
+                  <th>Aluno</th>
                   <th>Matrícula</th>
                   <th>CPF</th>
                   <th>Lançamentos</th>
@@ -108,7 +114,17 @@ export default async function PaginaAlunos({
 
                   return (
                     <tr key={aluno.id}>
-                      <td className="font-medium text-slate-900">{aluno.nome}</td>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <AvatarAluno
+                            alunoId={aluno.id}
+                            nome={aluno.nome}
+                            fotoEnviadaEm={aluno.fotoEnviadaEm}
+                            tamanho="pequeno"
+                          />
+                          <span className="font-medium text-slate-900">{aluno.nome}</span>
+                        </div>
+                      </td>
                       <td>{aluno.matricula}</td>
                       <td>{formatarCpf(aluno.cpf)}</td>
                       <td className="text-slate-500">
@@ -121,6 +137,12 @@ export default async function PaginaAlunos({
                           matricula={aluno.matricula}
                           cpf={aluno.cpf}
                           lancamentos={aluno._count.frequencias + avaliacoes}
+                          temFoto={aluno.fotoEnviadaEm !== null}
+                          fotoUrl={
+                            aluno.fotoEnviadaEm
+                              ? `/api/alunos/${aluno.id}/foto?v=${aluno.fotoEnviadaEm.getTime()}`
+                              : null
+                          }
                         />
                       </td>
                     </tr>
